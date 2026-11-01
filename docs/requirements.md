@@ -1,6 +1,6 @@
 # Requirements
 
-> Status: **Draft** — MVP scope agreed on 2026-10-04; revised on 2026-10-25.
+> Status: **Approved** — MVP scope agreed on 2026-10-04; revised on 2026-10-25.
 
 ## 1. Problem
 

@@ -1,17 +1,17 @@
 # Data Model
 
-> Status: **Draft** — revised on 2026-10-25, pending developer approval.
+> Status: **Approved** — 2026-10-25.
 
 ## Entities
 
-| Entity | Attributes | Purpose |
-|---|---|---|
-| `User` | `id`, `telegram_id`, `name`, `role`, `class_group_id`, `is_active` | Authenticated users. `role` is `professor`, `representative` or `vice_representative`. `class_group_id` is set only for representatives. Users are deactivated (`is_active = false`), never deleted |
-| `ClassGroup` | `id`, `name`, `course` | A class group (e.g., ADS, 5th semester) |
-| `AccessCode` | `id`, `code`, `role`, `class_group_id`, `used_by`, `used_at` | Single-use code. A filled `used_by` means the code was redeemed |
-| `Message` | `id`, `sender_id`, `text`, `sent_at` | Messages sent through the bot. The text is stored once |
-| `MessageRecipient` | `id`, `message_id`, `class_group_id`, `user_id` | Who a message was sent to: **either** a class group (professor → class groups) **or** a user (representative → professor) |
-| `Acknowledgment` | `id`, `message_id`, `user_id`, `acknowledged_at` | One row per user who acknowledged a message. Never updated or deleted |
+| Entity             | Attributes                                                         | Purpose                                                                                                                                                                                             |
+| ------------------ | ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `User`             | `id`, `telegram_id`, `name`, `role`, `class_group_id`, `is_active` | Authenticated users. `role` is `professor`, `representative` or `vice_representative`. `class_group_id` is set only for representatives. Users are deactivated (`is_active = false`), never deleted |
+| `ClassGroup`       | `id`, `name`, `course`                                             | A class group (e.g., ADS, 5th semester)                                                                                                                                                             |
+| `AccessCode`       | `id`, `code`, `role`, `class_group_id`, `used_by`, `used_at`       | Single-use code. A filled `used_by` means the code was redeemed                                                                                                                                     |
+| `Message`          | `id`, `sender_id`, `text`, `sent_at`                               | Messages sent through the bot. The text is stored once                                                                                                                                              |
+| `MessageRecipient` | `id`, `message_id`, `class_group_id`, `user_id`                    | Who a message was sent to: **either** a class group (professor → class groups) **or** a user (representative → professor)                                                                           |
+| `Acknowledgment`   | `id`, `message_id`, `user_id`, `acknowledged_at`                   | One row per user who acknowledged a message. Never updated or deleted                                                                                                                               |
 
 ## Constraints
 
@@ -33,21 +33,21 @@
 
 A professor sends one message to 2 class groups; in one group only the representative acknowledges, in the other both do:
 
-| Table | Rows created |
-|---|---|
-| `Message` | 1 |
-| `MessageRecipient` | 2 |
-| `Acknowledgment` | 3 |
+| Table              | Rows created |
+| ------------------ | ------------ |
+| `Message`          | 1            |
+| `MessageRecipient` | 2            |
+| `Acknowledgment`   | 3            |
 
 Both class groups count as acknowledged.
 
 A class representative sends one message to a professor, who acknowledges it:
 
-| Table | Rows created |
-|---|---|
-| `Message` | 1 |
+| Table              | Rows created       |
+| ------------------ | ------------------ |
+| `Message`          | 1                  |
 | `MessageRecipient` | 1 (with `user_id`) |
-| `Acknowledgment` | 1 |
+| `Acknowledgment`   | 1                  |
 
 ## Entity-relationship diagram
 
