@@ -5,24 +5,30 @@ from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
-# Lê o arquivo .env e carrega as variáveis no ambiente
-load_dotenv()
-TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
-# Fail fast: encerra se o token não estiver configurado
-if not TOKEN:
-    sys.exit(
-        "Error: TELEGRAM_BOT_TOKEN not found. "
-        "Copy .env.example to .env and add your bot token."
-    )
+def get_token() -> str:
+    """Load the bot token from the environment, exiting if it is missing."""
+    load_dotenv()
+    token = os.getenv("TELEGRAM_BOT_TOKEN")
+    if not token:
+        sys.exit(
+            "Error: TELEGRAM_BOT_TOKEN not found. "
+            "Copy .env.example to .env and add your bot token."
+        )
+    return token
+
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Responde ao comando /start."""
+    """Reply to the /start command with a welcome message."""
+    if update.message is None:
+        return
     await update.message.reply_text("Olá, Fatecano! Em que posso ajudar?")
 
 
 def main() -> None:
-    app = Application.builder().token(TOKEN).build()
+    """Build the bot application and start polling for updates."""
+    token = get_token()
+    app = Application.builder().token(token).build()
     app.add_handler(CommandHandler("start", start))
     app.run_polling()
 
