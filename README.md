@@ -12,11 +12,11 @@ At Fatec, professors are contacted by many students, through scattered WhatsApp 
 
 The solution combines native Telegram features with a bot, each used where it fits best:
 
-| Need | Solution |
-|---|---|
-| Notices any student can read | Telegram public channel |
-| General notices to all class representatives | Telegram group |
-| Targeted messages that need a read receipt | **This bot** |
+| Need                                         | Solution                |
+| -------------------------------------------- | ----------------------- |
+| Notices any student can read                 | Telegram public channel |
+| General notices to all class representatives | Telegram group          |
+| Targeted messages that need a read receipt   | **This bot**            |
 
 Every message sent through the bot must be acknowledged by its recipient, and each acknowledgment is stored with a timestamp.
 
@@ -66,6 +66,24 @@ cp .env.example .env
 
 # 5. Run the bot
 python main.py
+```
+
+## Development
+
+Install the development tools and enable the pre-commit hooks:
+
+```bash
+pip install -r requirements-dev.txt
+pre-commit install
+```
+
+Run the quality checks:
+
+```bash
+ruff check .
+ruff format --check .
+mypy .
+pytest
 ```
 
 ## Documentation
