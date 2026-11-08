@@ -15,4 +15,4 @@ exclude = ["^venv/"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["."] 
+pythonpath = ["."]
