@@ -1,5 +1,11 @@
 # telegram-class-notice-bot
 
+[![CI](https://github.com/DiegoCP89/telegram-class-notice-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/DiegoCP89/telegram-class-notice-bot/actions/workflows/ci.yml)
+[![Python 3.13](https://img.shields.io/badge/python-3.13-blue.svg)](https://www.python.org/downloads/)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![Checked with mypy](https://www.mypy-lang.org/static/mypy_badge.svg)](https://mypy-lang.org/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+
 A Python Telegram bot that helps professors reach class representatives directly, with read receipts, cutting down on repeated student questions.
 
 > **Status: work in progress.** The MVP is under development. See [Roadmap](#roadmap) for what already works.
@@ -76,6 +82,8 @@ Install the development tools and enable the pre-commit hooks:
 pip install -r requirements-dev.txt
 pre-commit install
 ```
+
+> Commit from a terminal with the virtual environment active: the mypy hook uses the project's environment.
 
 Run the quality checks:
 
