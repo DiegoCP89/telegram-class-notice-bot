@@ -224,3 +224,6 @@ desktop.ini
 
 # Editor settings
 .vscode/
+
+# Claude Code local instructions
+CLAUDE.local.md
