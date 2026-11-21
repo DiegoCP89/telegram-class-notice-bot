@@ -14,6 +14,9 @@ NOW = "2026-11-21T14:30:00+00:00"
 MISSING_ID = 999
 FOREIGN_KEY_ERROR = "FOREIGN KEY constraint failed"
 RECIPIENT_CHECK_ERROR = "CHECK constraint failed"
+ROLE_CLASS_GROUP_ERROR = (
+    "CHECK constraint failed: (role = 'professor') = (class_group_id IS NULL)"
+)
 
 INSERT_CLASS_GROUP = "INSERT INTO class_groups (name, course) VALUES (?, ?)"
 INSERT_USER = (
@@ -44,7 +47,7 @@ def connection() -> Iterator[sqlite3.Connection]:
         conn.execute(INSERT_CLASS_GROUP, ("Group A", "ADS"))
         conn.execute(INSERT_USER, (101, "Ana", "professor", None, 1))
         conn.execute(INSERT_USER, (102, "Bruno", "representative", 1, 1))
-        conn.execute(INSERT_USER, (103, "Carla", "representative", 1, 1))
+        conn.execute(INSERT_USER, (103, "Carla", "vice_representative", 1, 1))
         conn.execute(INSERT_MESSAGE, (1, "Exam tomorrow", NOW))
         conn.execute(INSERT_MESSAGE, (1, "Class canceled", NOW))
         conn.execute(INSERT_RECIPIENT, (1, 1, None))
@@ -117,7 +120,7 @@ def test_create_schema_is_idempotent(connection: sqlite3.Connection) -> None:
         ),
         pytest.param(
             INSERT_USER,
-            (104, "Davi", "student", None, 1),
+            (104, "Davi", "student", 1, 1),
             "CHECK constraint failed: role IN",
             id="user_invalid_role",
         ),
@@ -159,7 +162,7 @@ def test_create_schema_is_idempotent(connection: sqlite3.Connection) -> None:
         ),
         pytest.param(
             INSERT_CODE,
-            ("NEW001", "student", None, None, None),
+            ("NEW001", "student", 1, None, None),
             "CHECK constraint failed: role IN",
             id="code_invalid_role",
         ),
@@ -192,6 +195,54 @@ def test_create_schema_is_idempotent(connection: sqlite3.Connection) -> None:
             ("NEW001", "professor", None, 1, NOW),
             "UNIQUE constraint failed: access_codes.used_by",
             id="code_user_redeems_twice",
+        ),
+        pytest.param(
+            INSERT_USER,
+            (104, "Davi", "representative", 1, 1),
+            "UNIQUE constraint failed: users.class_group_id, users.role",
+            id="user_second_active_representative",
+        ),
+        pytest.param(
+            INSERT_USER,
+            (104, "Davi", "vice_representative", 1, 1),
+            "UNIQUE constraint failed: users.class_group_id, users.role",
+            id="user_second_active_vice",
+        ),
+        pytest.param(
+            INSERT_USER,
+            (104, "Davi", "representative", None, 1),
+            ROLE_CLASS_GROUP_ERROR,
+            id="user_representative_without_class_group",
+        ),
+        pytest.param(
+            INSERT_USER,
+            (104, "Davi", "vice_representative", None, 1),
+            ROLE_CLASS_GROUP_ERROR,
+            id="user_vice_without_class_group",
+        ),
+        pytest.param(
+            INSERT_USER,
+            (104, "Davi", "professor", 1, 1),
+            ROLE_CLASS_GROUP_ERROR,
+            id="user_professor_with_class_group",
+        ),
+        pytest.param(
+            INSERT_CODE,
+            ("NEW001", "representative", None, None, None),
+            ROLE_CLASS_GROUP_ERROR,
+            id="code_representative_without_class_group",
+        ),
+        pytest.param(
+            INSERT_CODE,
+            ("NEW001", "vice_representative", None, None, None),
+            ROLE_CLASS_GROUP_ERROR,
+            id="code_vice_without_class_group",
+        ),
+        pytest.param(
+            INSERT_CODE,
+            ("NEW001", "professor", 1, None, None),
+            ROLE_CLASS_GROUP_ERROR,
+            id="code_professor_with_class_group",
         ),
         pytest.param(
             INSERT_MESSAGE,
@@ -325,6 +376,16 @@ def test_constraint_rejects_invalid_data(
             id="professor_without_class_group",
         ),
         pytest.param(
+            INSERT_USER,
+            (101, "Ana", "professor", None, 0),
+            id="inactive_user_reuses_telegram_id",
+        ),
+        pytest.param(
+            INSERT_USER,
+            (104, "Davi", "representative", 1, 0),
+            id="inactive_user_does_not_fill_role",
+        ),
+        pytest.param(
             INSERT_CODE,
             ("FREE02", "representative", 1, None, None),
             id="second_unused_code",
@@ -364,6 +425,66 @@ def test_schema_accepts_valid_data(
     cursor = connection.execute(sql, values)
 
     assert cursor.rowcount == 1
+
+
+@pytest.mark.parametrize(
+    ("sql", "expected_error"),
+    [
+        pytest.param(
+            "UPDATE acknowledgments SET acknowledged_at = 'forged'",
+            "Acknowledgments cannot be changed.",
+            id="update_acknowledgment",
+        ),
+        pytest.param(
+            "DELETE FROM acknowledgments",
+            "Acknowledgments cannot be deleted.",
+            id="delete_acknowledgment",
+        ),
+        pytest.param(
+            "UPDATE access_codes SET used_by = 2 WHERE code = 'USED01'",
+            "Redeemed access codes cannot be changed.",
+            id="transfer_redeemed_code",
+        ),
+        pytest.param(
+            "DELETE FROM access_codes WHERE code = 'USED01'",
+            "Redeemed access codes cannot be deleted.",
+            id="delete_redeemed_code",
+        ),
+    ],
+)
+def test_trigger_blocks_protected_change(
+    connection: sqlite3.Connection, sql: str, expected_error: str
+) -> None:
+    with pytest.raises(sqlite3.IntegrityError, match=re.escape(expected_error)):
+        connection.execute(sql)
+
+
+def test_unused_code_can_be_redeemed(connection: sqlite3.Connection) -> None:
+    cursor = connection.execute(
+        "UPDATE access_codes SET used_by = 2, used_at = ? WHERE code = 'FREE01'",
+        (NOW,),
+    )
+
+    assert cursor.rowcount == 1
+
+
+def test_deactivated_user_can_return_with_new_code(
+    connection: sqlite3.Connection,
+) -> None:
+    with connection:
+        connection.execute("UPDATE users SET is_active = 0 WHERE id IN (2, 3)")
+        cursor = connection.execute(INSERT_USER, (103, "Carla", "representative", 1, 1))
+        connection.execute(
+            "UPDATE access_codes SET used_by = ?, used_at = ? WHERE code = 'FREE01'",
+            (cursor.lastrowid, NOW),
+        )
+
+    assert connection.execute(
+        "SELECT COUNT(*) FROM users WHERE telegram_id = 103"
+    ).fetchone() == (2,)
+    assert connection.execute(
+        "SELECT COUNT(*) FROM acknowledgments WHERE user_id = 2"
+    ).fetchone() == (1,)
 
 
 def count_messages_and_recipients(connection: sqlite3.Connection) -> tuple[int, int]:

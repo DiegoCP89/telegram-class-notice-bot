@@ -15,7 +15,7 @@
 
 ## Constraints
 
-- `User.telegram_id` is unique.
+- `User.telegram_id` is unique among active users, so a deactivated user can return with the same Telegram account and a new access code (BR-10).
 - `AccessCode.code` is unique.
 - `MessageRecipient`: exactly one of `class_group_id` and `user_id` is filled (`CHECK` constraint).
 - `Acknowledgment`: a user can acknowledge a given message only once (unique `message_id` + `user_id`).
@@ -25,6 +25,10 @@
 - `User.role` and `AccessCode.role` accept only `professor`, `representative` and `vice_representative` (`CHECK` constraint).
 - Every column is required (`NOT NULL`) except: `User.class_group_id`, `AccessCode.class_group_id`, `AccessCode.used_by`, `AccessCode.used_at`, `MessageRecipient.class_group_id` and `MessageRecipient.user_id`.
 - Foreign keys are enforced on every connection (`PRAGMA foreign_keys = ON`).
+- A class group has at most one active user per role (BR-05).
+- `User.class_group_id` and `AccessCode.class_group_id` are empty for `professor` and filled for `representative` and `vice_representative` (`CHECK` constraint).
+- A redeemed access code cannot be updated or deleted (BR-03, enforced by triggers).
+- `Acknowledgment` rows cannot be updated or deleted (BR-08, enforced by triggers).
 
 ## Design notes
 
@@ -49,7 +53,7 @@
 - **Plural, snake_case table names:** a table holds many rows, and `user` is a reserved word in PostgreSQL, the planned future database (ADR-0005). Python classes stay singular (`User`).
 - **`STRICT` tables:** SQLite accepts any value in any column by default; `STRICT` rejects values of the wrong type.
 - **Booleans as `INTEGER` 0/1:** SQLite has no boolean type. A `CHECK` limits the values. `User.is_active` defaults to 1, so a new user starts active.
-- **Timestamps as `TEXT` in ISO 8601, in UTC** (e.g., `2026-11-21T14:30:00+00:00`): SQLite has no date type, ISO 8601 text sorts in chronological order, and UTC avoids time zone ambiguity. Times are converted to local time only for display.
+- **Timestamps as `TEXT` in ISO 8601, in UTC** (e.g., `2026-11-21T14:30:00+00:00`): SQLite has no date type, ISO 8601 text sorts in chronological order, and UTC avoids time zone ambiguity. All values use the same format with second precision. Times are converted to local time only for display.
 
 ## Examples
 
