@@ -2,6 +2,7 @@
 
 import sqlite3
 from collections.abc import Sequence
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import cast
 
@@ -16,8 +17,15 @@ def connect(database: str | Path) -> sqlite3.Connection:
     return connection
 
 
+def _require_no_open_transaction(connection: sqlite3.Connection) -> None:
+    """Reject calls that would commit a transaction owned by the caller."""
+    if connection.in_transaction:
+        raise RuntimeError("Finish the open transaction before this call.")
+
+
 def create_schema(connection: sqlite3.Connection) -> None:
     """Create all tables that do not exist yet."""
+    _require_no_open_transaction(connection)
     schema = SCHEMA_PATH.read_text(encoding="utf-8")
     connection.executescript(schema)
 
@@ -26,18 +34,22 @@ def create_message(
     connection: sqlite3.Connection,
     sender_id: int,
     text: str,
-    sent_at: str,
+    sent_at: datetime,
     class_group_ids: Sequence[int] = (),
     user_ids: Sequence[int] = (),
 ) -> int:
     """Save a message and its recipients atomically and return the message id."""
     if not class_group_ids and not user_ids:
         raise ValueError("A message needs at least one recipient.")
+    if sent_at.utcoffset() is None:
+        raise ValueError("sent_at must include a time zone.")
+    _require_no_open_transaction(connection)
+    stored_sent_at = sent_at.astimezone(UTC).isoformat(timespec="seconds")
 
     with connection:
         cursor = connection.execute(
             "INSERT INTO messages (sender_id, text, sent_at) VALUES (?, ?, ?)",
-            (sender_id, text, sent_at),
+            (sender_id, text, stored_sent_at),
         )
         message_id = cast(int, cursor.lastrowid)
         recipients: list[tuple[int, int | None, int | None]] = [

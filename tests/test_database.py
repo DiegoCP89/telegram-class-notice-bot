@@ -3,6 +3,7 @@
 import re
 import sqlite3
 from collections.abc import Iterator
+from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
 
@@ -11,6 +12,7 @@ import database
 SqlValue = int | str | None
 
 NOW = "2026-11-21T14:30:00+00:00"
+SENT_AT = datetime(2026, 11, 21, 14, 30, tzinfo=UTC)
 MISSING_ID = 999
 FOREIGN_KEY_ERROR = "FOREIGN KEY constraint failed"
 RECIPIENT_CHECK_ERROR = "CHECK constraint failed"
@@ -503,7 +505,7 @@ def test_create_message_saves_class_group_recipients(
         connection.execute(INSERT_CLASS_GROUP, ("Group B", "ADS"))
 
     message_id = database.create_message(
-        connection, 1, "Exam moved", NOW, class_group_ids=[1, 2]
+        connection, 1, "Exam moved", SENT_AT, class_group_ids=[1, 2]
     )
 
     assert connection.execute(
@@ -518,7 +520,7 @@ def test_create_message_saves_class_group_recipients(
 
 def test_create_message_saves_user_recipient(connection: sqlite3.Connection) -> None:
     message_id = database.create_message(
-        connection, 2, "Question about the exam", NOW, user_ids=[1]
+        connection, 2, "Question about the exam", SENT_AT, user_ids=[1]
     )
 
     assert connection.execute(
@@ -531,7 +533,7 @@ def test_create_message_requires_a_recipient(connection: sqlite3.Connection) -> 
     before = count_messages_and_recipients(connection)
 
     with pytest.raises(ValueError, match="at least one recipient"):
-        database.create_message(connection, 1, "No recipient", NOW)
+        database.create_message(connection, 1, "No recipient", SENT_AT)
 
     assert count_messages_and_recipients(connection) == before
 
@@ -560,7 +562,60 @@ def test_create_message_failure_leaves_no_partial_data(
 
     with pytest.raises(sqlite3.IntegrityError, match=re.escape(expected_error)):
         database.create_message(
-            connection, sender_id, "Partial", NOW, class_group_ids=class_group_ids
+            connection, sender_id, "Partial", SENT_AT, class_group_ids=class_group_ids
         )
 
     assert count_messages_and_recipients(connection) == before
+
+
+def test_create_message_stores_sent_at_in_utc(connection: sqlite3.Connection) -> None:
+    local_time = datetime(2026, 11, 21, 11, 30, tzinfo=timezone(timedelta(hours=-3)))
+
+    message_id = database.create_message(
+        connection, 1, "Exam moved", local_time, class_group_ids=[1]
+    )
+
+    assert connection.execute(
+        "SELECT sent_at FROM messages WHERE id = ?", (message_id,)
+    ).fetchone() == (NOW,)
+
+
+def test_create_message_rejects_sent_at_without_time_zone(
+    connection: sqlite3.Connection,
+) -> None:
+    before = count_messages_and_recipients(connection)
+
+    with pytest.raises(ValueError, match="time zone"):
+        database.create_message(
+            connection,
+            1,
+            "No time zone",
+            datetime(2026, 11, 21, 14, 30),
+            class_group_ids=[1],
+        )
+
+    assert count_messages_and_recipients(connection) == before
+
+
+def test_create_message_does_not_commit_caller_transaction(
+    connection: sqlite3.Connection,
+) -> None:
+    connection.execute(INSERT_CLASS_GROUP, ("Group B", "ADS"))
+
+    with pytest.raises(RuntimeError, match="open transaction"):
+        database.create_message(connection, 1, "Inside", SENT_AT, class_group_ids=[1])
+    connection.rollback()
+
+    assert connection.execute("SELECT COUNT(*) FROM class_groups").fetchone() == (1,)
+
+
+def test_create_schema_does_not_commit_caller_transaction(
+    connection: sqlite3.Connection,
+) -> None:
+    connection.execute(INSERT_CLASS_GROUP, ("Group B", "ADS"))
+
+    with pytest.raises(RuntimeError, match="open transaction"):
+        database.create_schema(connection)
+    connection.rollback()
+
+    assert connection.execute("SELECT COUNT(*) FROM class_groups").fetchone() == (1,)
