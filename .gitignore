@@ -227,3 +227,9 @@ desktop.ini
 
 # Claude Code local instructions
 CLAUDE.local.md
+
+# SQLite database files
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
