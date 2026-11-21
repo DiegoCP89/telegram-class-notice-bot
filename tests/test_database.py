@@ -364,3 +364,82 @@ def test_schema_accepts_valid_data(
     cursor = connection.execute(sql, values)
 
     assert cursor.rowcount == 1
+
+
+def count_messages_and_recipients(connection: sqlite3.Connection) -> tuple[int, int]:
+    """Return the number of rows in messages and message_recipients."""
+    row = connection.execute(
+        "SELECT (SELECT COUNT(*) FROM messages), "
+        "(SELECT COUNT(*) FROM message_recipients)"
+    ).fetchone()
+    return int(row[0]), int(row[1])
+
+
+def test_create_message_saves_class_group_recipients(
+    connection: sqlite3.Connection,
+) -> None:
+    with connection:
+        connection.execute(INSERT_CLASS_GROUP, ("Group B", "ADS"))
+
+    message_id = database.create_message(
+        connection, 1, "Exam moved", NOW, class_group_ids=[1, 2]
+    )
+
+    assert connection.execute(
+        "SELECT sender_id, text, sent_at FROM messages WHERE id = ?", (message_id,)
+    ).fetchone() == (1, "Exam moved", NOW)
+    assert connection.execute(
+        "SELECT class_group_id, user_id FROM message_recipients "
+        "WHERE message_id = ? ORDER BY class_group_id",
+        (message_id,),
+    ).fetchall() == [(1, None), (2, None)]
+
+
+def test_create_message_saves_user_recipient(connection: sqlite3.Connection) -> None:
+    message_id = database.create_message(
+        connection, 2, "Question about the exam", NOW, user_ids=[1]
+    )
+
+    assert connection.execute(
+        "SELECT class_group_id, user_id FROM message_recipients WHERE message_id = ?",
+        (message_id,),
+    ).fetchall() == [(None, 1)]
+
+
+def test_create_message_requires_a_recipient(connection: sqlite3.Connection) -> None:
+    before = count_messages_and_recipients(connection)
+
+    with pytest.raises(ValueError, match="at least one recipient"):
+        database.create_message(connection, 1, "No recipient", NOW)
+
+    assert count_messages_and_recipients(connection) == before
+
+
+@pytest.mark.parametrize(
+    ("sender_id", "class_group_ids", "expected_error"),
+    [
+        pytest.param(MISSING_ID, [1], FOREIGN_KEY_ERROR, id="missing_sender"),
+        pytest.param(1, [1, MISSING_ID], FOREIGN_KEY_ERROR, id="missing_class_group"),
+        pytest.param(
+            1,
+            [1, 1],
+            "UNIQUE constraint failed: "
+            "message_recipients.message_id, message_recipients.class_group_id",
+            id="duplicate_class_group",
+        ),
+    ],
+)
+def test_create_message_failure_leaves_no_partial_data(
+    connection: sqlite3.Connection,
+    sender_id: int,
+    class_group_ids: list[int],
+    expected_error: str,
+) -> None:
+    before = count_messages_and_recipients(connection)
+
+    with pytest.raises(sqlite3.IntegrityError, match=re.escape(expected_error)):
+        database.create_message(
+            connection, sender_id, "Partial", NOW, class_group_ids=class_group_ids
+        )
+
+    assert count_messages_and_recipients(connection) == before
