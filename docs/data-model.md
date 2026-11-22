@@ -1,6 +1,6 @@
 # Data Model
 
-> Status: **Approved** — 2026-10-25.
+> Status: **Approved** — 2026-10-25. Updated 2026-11-21 with the physical schema decisions (issue #3).
 
 ## Entities
 
@@ -15,10 +15,21 @@
 
 ## Constraints
 
-- `User.telegram_id` is unique.
+- `User.telegram_id` is unique among active users, so a deactivated user can return with the same Telegram account and a new access code (BR-10).
 - `AccessCode.code` is unique.
 - `MessageRecipient`: exactly one of `class_group_id` and `user_id` is filled (`CHECK` constraint).
 - `Acknowledgment`: a user can acknowledge a given message only once (unique `message_id` + `user_id`).
+- `AccessCode.used_by` is unique: a user redeems at most one code. Unused codes (`used_by` empty) do not conflict with each other.
+- `AccessCode`: `used_by` and `used_at` are either both empty (unused code) or both filled (redeemed code) (`CHECK` constraint).
+- `MessageRecipient`: a class group or a user appears at most once per message (unique `message_id` + `class_group_id`, unique `message_id` + `user_id`).
+- `User.role` and `AccessCode.role` accept only `professor`, `representative` and `vice_representative` (`CHECK` constraint).
+- Every column is required (`NOT NULL`) except: `User.class_group_id`, `AccessCode.class_group_id`, `AccessCode.used_by`, `AccessCode.used_at`, `MessageRecipient.class_group_id` and `MessageRecipient.user_id`.
+- Foreign keys are enforced on every connection (`PRAGMA foreign_keys = ON`).
+- A class group has at most one active user per role (BR-05).
+- `User.class_group_id` and `AccessCode.class_group_id` are empty for `professor` and filled for `representative` and `vice_representative` (`CHECK` constraint).
+- A redeemed access code cannot be updated or deleted (BR-03, enforced by triggers).
+- `Acknowledgment` rows cannot be updated or deleted (BR-08, enforced by triggers).
+- `User` rows cannot be deleted, only deactivated (BR-10, enforced by a trigger).
 
 ## Design notes
 
@@ -28,6 +39,22 @@
 - **Class group acknowledgment is derived, not stored:** a class group has acknowledged a message when at least one of its representatives has an `Acknowledgment` row for it (BR-06).
 - **Soft delete for users:** deleting a user would orphan their `Acknowledgment` rows and destroy the proof they provide (BR-08). A lost account or a new representative is handled by deactivating the old user and issuing a new access code.
 - **General notices are not stored:** they are posted in the native Telegram group (BR-09).
+
+## Physical schema (SQLite)
+
+| Entity             | Table                |
+| ------------------ | -------------------- |
+| `User`             | `users`              |
+| `ClassGroup`       | `class_groups`       |
+| `AccessCode`       | `access_codes`       |
+| `Message`          | `messages`           |
+| `MessageRecipient` | `message_recipients` |
+| `Acknowledgment`   | `acknowledgments`    |
+
+- **Plural, snake_case table names:** a table holds many rows, and `user` is a reserved word in PostgreSQL, the planned future database (ADR-0005). Python classes stay singular (`User`).
+- **`STRICT` tables:** SQLite accepts any value in any column by default; `STRICT` rejects values of the wrong type.
+- **Booleans as `INTEGER` 0/1:** SQLite has no boolean type. A `CHECK` limits the values. `User.is_active` defaults to 1, so a new user starts active.
+- **Timestamps as `TEXT` in ISO 8601, in UTC** (e.g., `2026-11-21T14:30:00+00:00`): SQLite has no date type, ISO 8601 text sorts in chronological order, and UTC avoids time zone ambiguity. All values use the same format with second precision. Times are converted to local time only for display.
 
 ## Examples
 
