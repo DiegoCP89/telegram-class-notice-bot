@@ -29,6 +29,7 @@
 - `User.class_group_id` and `AccessCode.class_group_id` are empty for `professor` and filled for `representative` and `vice_representative` (`CHECK` constraint).
 - A redeemed access code cannot be updated or deleted (BR-03, enforced by triggers).
 - `Acknowledgment` rows cannot be updated or deleted (BR-08, enforced by triggers).
+- `User` rows cannot be deleted, only deactivated (BR-10, enforced by a trigger).
 
 ## Design notes
 

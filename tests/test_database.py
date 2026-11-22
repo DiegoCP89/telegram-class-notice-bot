@@ -452,6 +452,11 @@ def test_schema_accepts_valid_data(
             "Redeemed access codes cannot be deleted.",
             id="delete_redeemed_code",
         ),
+        pytest.param(
+            "DELETE FROM users WHERE id = 3",
+            "Users cannot be deleted. Deactivate them instead.",
+            id="delete_user_without_references",
+        ),
     ],
 )
 def test_trigger_blocks_protected_change(

@@ -23,6 +23,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_users_active_class_group_role
     ON users (class_group_id, role)
     WHERE is_active = 1 AND class_group_id IS NOT NULL;
 
+CREATE TRIGGER IF NOT EXISTS trg_users_block_delete
+BEFORE DELETE ON users
+BEGIN
+    SELECT RAISE(ABORT, 'Users cannot be deleted. Deactivate them instead.');
+END;
+
 CREATE TABLE IF NOT EXISTS access_codes (
     id             INTEGER PRIMARY KEY,
     code           TEXT    NOT NULL UNIQUE,
